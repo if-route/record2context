@@ -1,0 +1,7 @@
+node_modules/
+dist/
+e2e/.out/
+e2e/.profile*/
+*.log
+.DS_Store
+sessions/

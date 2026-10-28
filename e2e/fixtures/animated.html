@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Animated test page</title>
+<style>
+  body { font: 16px system-ui, sans-serif; margin: 24px; }
+  #code { position: fixed; left: 0; top: 0; }
+  .spinner { position: fixed; right: 48px; top: 48px; width: 48px; height: 48px; border-radius: 6px; background: #7c3aed;
+    animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<canvas id="code" width="720" height="40"></canvas>
+<div class="spinner"></div>
+<h1 style="margin-top: 96px">Animated test page</h1>
+<p>Repaints every frame. The blocks at the top are Date.now() at that frame (18 bits, ms), so a video frame says when it was drawn.
+Every 250 ms the frame that draws a code also logs it (console.error "r2c-code"), so report.json has an event for that exact frame.</p>
+<script>
+  // Block i (40x40 px) is white when bit i of Date.now() mod 2^18 is set; read back by e2e/pauses.e2e.mjs.
+  const g = document.getElementById("code").getContext("2d");
+  let logged = 0;
+  const draw = () => {
+    const now = Date.now();
+    const ms = now % 262144;
+    for (let i = 0; i < 18; i++) {
+      g.fillStyle = (ms >> i) & 1 ? "#fff" : "#000";
+      g.fillRect(i * 40, 0, 40, 40);
+    }
+    if (now - logged >= 250) {
+      logged = now;
+      console.error(`r2c-code ${now}`);
+    }
+    requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>

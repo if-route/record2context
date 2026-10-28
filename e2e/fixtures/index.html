@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>record2context local test page</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jodit@4/es2021/jodit.min.css">
+<style>
+  body { font: 15px/1.4 system-ui, sans-serif; margin: 24px; }
+  label { display: block; margin: 8px 0; }
+  .row { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  #plain { border: 1px solid #999; min-height: 40px; padding: 6px; }
+  .card-body { display: inline-block; width: 40px; height: 40px; background: #ddd; }
+</style>
+</head>
+<body>
+<span class="card-body" title=""></span>
+<h1 id="page-title">Local test page</h1>
+<p id="route">Route: /</p>
+<form onsubmit="return false">
+  <label>Title <input name="title"></label>
+  <label for="notes">Notes</label><textarea id="notes" name="notes" rows="2" cols="60"></textarea>
+  <label>Unit <select name="unit"><option>MWh</option><option>GWh</option></select></label>
+  <label>Password <input type="password" name="password"></label>
+  <label>API token <input name="api_token"></label>
+  <label>Email Address <input name="login"></label>
+  <label>Work <input type="email" name="work"></label>
+  <label><input type="checkbox" name="agree"> I agree</label>
+</form>
+<h2>Plain editor</h2>
+<div id="plain" contenteditable="true"></div>
+<h2>Jodit editor</h2>
+<textarea id="jodit"></textarea>
+<div class="row">
+  <button type="button" id="load">Load data</button>
+  <button type="button" id="xhr">XHR call</button>
+  <button type="button" id="fail">Failing call</button>
+  <button type="button" id="nav">Go to details</button>
+  <button type="button" id="err">Log error</button>
+  <button type="button" id="find">Find qa.person@example.com</button>
+  <button type="button" aria-label="Settings"><svg width="16" height="16"><circle cx="8" cy="8" r="6"/></svg></button>
+</div>
+<pre id="out"></pre>
+<script src="https://cdn.jsdelivr.net/npm/jodit@4/es2021/jodit.min.js"></script>
+<script>
+  window.joditReady = false;
+  try { window.editor = Jodit.make("#jodit", { height: 160, toolbarAdaptive: false }); window.joditReady = true; } catch (e) { console.warn(e); }
+  const out = document.getElementById("out");
+  const route = () => (document.getElementById("route").textContent = "Route: " + location.pathname);
+  route();
+  document.getElementById("load").onclick = async () => {
+    const r = await fetch("/api/ping?token=secret123&q=1");
+    out.textContent = await r.text();
+  };
+  document.getElementById("xhr").onclick = () => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "/api/ping");
+    x.onload = () => (out.textContent = x.responseText);
+    x.send("{}");
+  };
+  document.getElementById("fail").onclick = () => fetch("/api/fail").catch(() => {});
+  document.getElementById("nav").onclick = () => { history.pushState({}, "", "/details?id=7"); route(); };
+  document.getElementById("err").onclick = () => console.error("boom", new Error("kaboom"));
+  document.getElementById("find").onclick = async () => {
+    await fetch("/api/ping?user=qa.person%40example.com&owner=qa.person@example.com");
+    console.error("no access for qa.person@example.com");
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>record2context data test page</title>
+</head>
+<body>
+<h1>Data test page</h1>
+<button type="button" id="calls">Run calls</button>
+<pre id="out"></pre>
+<script>
+  // Storage with values that must never reach report.json unredacted (e2e/data.e2e.mjs).
+  const JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJTRUNSRVQtSldUIn0.c2VjcmV0LXNpZ25hdHVyZS12YWx1ZQ";
+  localStorage.clear();
+  sessionStorage.clear();
+  localStorage.setItem("authToken", "SECRET-LS-TOKEN-1");
+  localStorage.setItem("theme", "dark");
+  localStorage.setItem("profile", JSON.stringify({ id: 7, email: "secret.person@example.com", jwt: JWT, lang: "th" }));
+  localStorage.setItem("blob", "U0VDUkVULUJBU0U2NC1WQUxVRS0xMjM0NTY3ODkwYWJj");
+  localStorage.setItem("persist:root", JSON.stringify({ user: JSON.stringify({ name: "A", accessToken: "SECRET-NESTED-TOKEN", password: "SECRET-NESTED-PW" }) }));
+  localStorage.setItem("bigState", JSON.stringify({ user: { password: "SECRET-BIG-PW" }, pad: "a ".repeat(40000) }));
+  localStorage.setItem("prefs", JSON.stringify({ user: "bob", pass: "SECRET-PASS-WORD" }));
+  localStorage.setItem("u", "AKIASECRETKEYID12345");
+  sessionStorage.setItem("csrf", "SECRET-SS-CSRF-2");
+  sessionStorage.setItem("step", "2");
+  document.cookie = "sid=SECRET-COOKIE-VALUE-3; path=/";
+  document.cookie = "prefs=SECRET-COOKIE-VALUE-4; path=/";
+
+  window.results = {};
+  async function readStream() {
+    const t0 = performance.now();
+    const res = await fetch("/api/stream");
+    const reader = res.body.getReader();
+    const chunks = [];
+    const times = [];
+    for (let r = await reader.read(); !r.done; r = await reader.read()) {
+      chunks.push(new TextDecoder().decode(r.value));
+      times.push(Math.round(performance.now() - t0));
+    }
+    return { text: chunks.join(""), times };
+  }
+  async function readEndless() {
+    const res = await fetch("/api/endless");
+    const reader = res.body.getReader();
+    let text = "";
+    while ((text.match(/data:/g) || []).length < 3) {
+      const r = await reader.read();
+      if (r.done) break;
+      text += new TextDecoder().decode(r.value);
+    }
+    await reader.cancel();
+    return (text.match(/data: \d+/g) || []).slice(0, 3);
+  }
+  document.getElementById("calls").onclick = async () => {
+    const r = window.results;
+    console.error("upstream rejected key sk-proj-SECRETCONSOLEKEY1234567890");
+    const echo = await fetch("/api/echo?n=1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ note: "REQUEST-BODY-MARKER-1" }) });
+    r.echo = await echo.json();
+    const req = new Request("/api/echo?n=2", { method: "POST", headers: { "content-type": "text/plain" }, body: "REQUEST-BODY-MARKER-2" });
+    r.requestObject = await (await fetch(req)).json();
+    r.xhr = await new Promise((done) => {
+      const x = new XMLHttpRequest();
+      x.open("POST", "/api/echo?n=3");
+      x.setRequestHeader("content-type", "text/plain");
+      x.onload = () => done(JSON.parse(x.responseText));
+      x.send("REQUEST-BODY-MARKER-3");
+    });
+    const [stream, endless, big, image] = await Promise.all([readStream(), readEndless(), fetch("/api/big").then((b) => b.text()), fetch("/api/image").then((b) => b.arrayBuffer())]);
+    r.stream = stream;
+    r.endless = endless;
+    r.bigLength = big.length;
+    r.bigEnd = big.slice(-3);
+    r.imageBytes = image.byteLength;
+    r.done = true;
+    document.getElementById("out").textContent = "done";
+  };
+</script>
+</body>
+</html>

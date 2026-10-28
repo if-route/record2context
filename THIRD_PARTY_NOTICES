@@ -1,0 +1,39 @@
+record2context includes code adapted from TraceBug (https://github.com/prashantsinghmangat/TraceBug-ai),
+develop branch, v1.11.1. Adapted files carry a one-line origin comment at the top.
+
+Adapted from TraceBug:
+- src/content/labels.ts       (buildSelector, fieldLabel in src/collectors.ts)
+- src/content/inputs.ts       (collectInputs, isSensitiveField, contentEditableHost in src/collectors.ts)
+- src/content/index.ts        (click/key capture in src/collectors.ts)
+- src/content/editor.ts       (drawing ideas from src/draw-mode.ts, src/region-screenshot.ts)
+- src/main/index.ts           (fetch/XHR wrappers, route and error collectors in src/collectors.ts)
+- src/shared/network-dedupe.ts (src/network-dedupe.ts)
+- src/shared/redact.ts        (sanitizeUrl in src/collectors.ts, isSensitiveParamName in src/url-hygiene.ts)
+
+The review UI (review/ui/) follows the layout of TraceBug's exported-report viewer (src/exporters/html-template.ts:
+video with an event timeline and synced Console / Network / Actions tabs). No code was copied from it.
+
+----------------------------------------------------------------------------
+TraceBug license:
+
+MIT License
+
+Copyright (c) 2026 Prashant Singh Mangat
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

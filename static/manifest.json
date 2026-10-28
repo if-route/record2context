@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "record2context",
+  "version": "0.1.0",
+  "description": "Record what you did in a tab (video, actions, network, marks with notes) as context for an AI.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtrSjwiminrmTOcvud95iaRLmScBM3ztgUA7N3mGDJNs5Kx1wUzb7Whk8YCOVY1rqGI2OjH66s+XE77I94r9VnaXRkpamhZjfV1Vc6jUSz7VisoMMMjFd1k+COHK16lSy1yi+slOJEto9L1Vy1egNQmcmRK0Ts0497VoVmMRVc7+wQ2LK60M9CzsKxvYfon4Uf+jzWkecKxlHD8GSF5ivTIaeA8+zCzUKW4UG688/unX52z1xx1bwAHwxlPTVar8GdXVL6tILEQb5BxbQaz0mlJPRG4mxnPBvW5V0DxJjfA6hMzz0yiWX+75CsUsosq4GqFfqNB/mnYyPIlgicgN/3wIDAQAB",
+  "minimum_chrome_version": "127",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "record2context",
+    "default_icon": {
+      "16": "icons/16.png",
+      "32": "icons/32.png",
+      "48": "icons/48.png",
+      "128": "icons/128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "32": "icons/32.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "permissions": [
+    "tabCapture",
+    "offscreen",
+    "scripting",
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "nativeMessaging"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Start or stop recording this tab"
+    },
+    "screenshot": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Screenshot: pause, capture this tab, draw and write a note"
+    }
+  }
+}

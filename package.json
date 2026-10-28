@@ -1,0 +1,38 @@
+{
+  "name": "record2context",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension that records what you did in a tab (video, action log, network, marks with notes) as context for an AI.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "icons": "node scripts/make-icons.mjs",
+    "install-host": "node host/install.mjs",
+    "uninstall-host": "node host/install.mjs --uninstall",
+    "verify-install": "node host/verify.mjs",
+    "e2e:local": "node e2e/local.e2e.mjs",
+    "e2e:local:xvfb": "sh e2e/docker/run.sh local",
+    "e2e:pauses": "node e2e/pauses.e2e.mjs",
+    "e2e:pauses:xvfb": "sh e2e/docker/run.sh pauses",
+    "e2e:tab-close": "node e2e/tab-close.e2e.mjs",
+    "e2e:annotate": "node e2e/annotate.e2e.mjs",
+    "e2e:popup": "node e2e/popup.e2e.mjs",
+    "e2e:recordings": "node e2e/recordings.e2e.mjs",
+    "e2e:xvfb": "sh e2e/docker/run.sh",
+    "e2e:host": "node e2e/host.e2e.mjs",
+    "e2e:data": "node e2e/data.e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.6",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "jsdom": "^25.0.1",
+    "playwright": "1.61.1",
+    "typescript": "^7.0.2",
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
+  }
+}

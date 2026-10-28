@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>record2context</title>
+<style>
+  [hidden] { display: none !important; }
+  body { margin: 0; width: 320px; font: 13px/1.4 -apple-system, system-ui, sans-serif; color: #111827; }
+  main { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  h1 { font-size: 14px; margin: 0; }
+  h2 { font-size: 12px; margin: 0; color: #6b7280; font-weight: 600; }
+  button { border: 0; border-radius: 8px; padding: 10px; font: 600 13px/1 inherit; color: #fff; cursor: pointer; }
+  button.start { background: #dc2626; }
+  button.stop { background: #111827; }
+  button:disabled { opacity: .6; cursor: default; }
+  p { margin: 0; color: #4b5563; font-size: 12px; word-break: break-word; }
+  .warn { color: #92400e; background: #fef3c7; border-radius: 6px; padding: 7px 8px; }
+  #recent { border-top: 1px solid #e5e7eb; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  #recent ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  #recent li { display: flex; flex-direction: column; gap: 5px; }
+  #recent .meta { font-size: 12px; color: #374151; }
+  #recent .meta b { color: #111827; }
+  #recent .acts { display: flex; gap: 4px; flex-wrap: wrap; }
+  #recent .acts button { background: #f3f4f6; color: #111827; padding: 6px 8px; font-size: 11px; font-weight: 600; }
+  #recent .acts button.ai { background: #2563eb; color: #fff; }
+  #recent .acts button:hover { filter: brightness(.95); }
+  #recent .partial { color: #92400e; }
+  #recent .acts button.danger { color: #b91c1c; }
+  #recent .confirm { flex-basis: 100%; font-size: 12px; color: #b91c1c; margin-top: 4px; }
+  #recent .delete { display: contents; }
+  .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .top a { font-size: 12px; color: #2563eb; }
+  .folder { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 12px; color: #374151; }
+  .folder.warn { color: #92400e; background: #fef3c7; border-radius: 6px; padding: 7px 8px; }
+  .folder button { background: #f3f4f6; color: #111827; padding: 5px 8px; font-size: 11px; }
+  .folder button.go { background: #2563eb; color: #fff; }
+  .setup-line { display: flex; gap: 8px; align-items: center; justify-content: space-between; width: 100%; font-weight: 600; }
+  #keys { border-top: 1px solid #e5e7eb; padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  #keys ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #374151; }
+  #keys kbd { display: inline-block; min-width: 44px; margin-right: 6px; font-family: inherit; font-weight: 600; color: #111827; }
+  #keys kbd.none { min-width: 0; font-weight: 400; color: #92400e; }
+  .setup-line button { background: #2563eb; color: #fff; padding: 6px 10px; font-size: 11px; flex: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><h1>record2context</h1><a id="all" href="recordings.html">All recordings</a></div>
+  <p id="folder" class="folder" data-testid="popup-folder"></p>
+  <button id="action" class="start" disabled>Start recording</button>
+  <p id="status"></p>
+  <p id="warning" class="warn" hidden></p>
+  <section id="recent" hidden>
+    <h2>Latest recording</h2>
+    <ul id="recent-list"></ul>
+  </section>
+  <p id="deleted" hidden></p>
+  <section id="keys" data-testid="popup-shortcuts">
+    <h2>Shortcuts</h2>
+    <ul id="keys-list"></ul>
+  </section>
+</main>
+<script src="popup.js"></script>
+</body>
+</html>
