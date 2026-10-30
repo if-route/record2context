@@ -1,7 +1,7 @@
 // Annotation tools: Screenshot (a Mark) opens the editor on the paused frame; two shapes with their own notes and colours,
 // a note, Continue → countdown → resume; a second Screenshot by its shortcut with one pen shape. The HUD shows the keys. Checks report.json, the saved images and context.md.
 // Run: npm run build && node e2e/annotate.e2e.mjs
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { startServer } from "./server.mjs";
 import { OUT, ROOT, launch, log, markWithShapes, readReport, startRecording, stopViaHud, waitForOutput } from "./lib.mjs";
@@ -32,6 +32,22 @@ async function countColour(page, pngBase64, hex, tol = 40) {
     { b64: pngBase64, hex, tol },
   );
 }
+
+/** Layout of the open editor in CSS px. */
+const editorBoxes = (page) =>
+  page.evaluate(() => {
+    const r = document.querySelector("record2context-ui").shadowRoot;
+    const box = (sel) => {
+      const b = r.querySelector(sel).getBoundingClientRect();
+      return { x: b.x, y: b.y, w: b.width, h: b.height, right: b.right, bottom: b.bottom };
+    };
+    const body = r.querySelector(".ed .body");
+    return { bar: box(".ed .bar"), body: box(".ed .body"), stage: box(".ed .stage"), img: box(".ed img"), canvas: box(".ed canvas"), side: box(".ed .side"), cont: box(".ed button.continue"), scrollTop: body.scrollTop, vw: document.documentElement.clientWidth, iw: innerWidth };
+  });
+const near = (a, b, tol = 1) => Math.abs(a - b) <= tol;
+const sameRect = (a, b) => near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w) && near(a.h, b.h);
+const ARTIFACTS = process.env.R2C_E2E_ARTIFACTS ?? OUT;
+mkdirSync(ARTIFACTS, { recursive: true });
 
 const { server, port } = await startServer(join(ROOT, "e2e", "fixtures"));
 const env = await launch("annotate");
@@ -70,6 +86,9 @@ try {
   const paused = await sw.evaluate(async () => (await chrome.storage.session.get("session")).session?.pauses?.at(-1)?.end === undefined);
   check("the video is paused while the editor is open", paused);
   await page.screenshot({ path: join(OUT, "annotate-editor.png") });
+  const wide = await editorBoxes(page);
+  check("wide layout: the side panel (300px + padding) sits beside the image", wide.vw === 1280 && near(wide.side.w, 312) && wide.side.x >= wide.stage.right - 1 && near(wide.side.y, wide.stage.y) && wide.canvas.w > 800, JSON.stringify(wide));
+  await page.screenshot({ path: join(ARTIFACTS, "editor-1280.png") });
   check("the last colour is remembered", (await sw.evaluate(async () => (await chrome.storage.local.get("annotateColor")).annotateColor)) === "cyan");
 
   await ed.locator("button.continue").click();
@@ -149,6 +168,71 @@ try {
   const top = readdirSync(dir).sort();
   check("top level: the video and the two drawn Screenshots, then details/", JSON.stringify(top) === JSON.stringify([`${report.video.file}`, "details", "screenshot-01.png", "screenshot-02.png"].sort()), top.join(", "));
   check("AI-README.md explains the shapes", readme.includes("## Screenshots and shapes") && readme.includes("`screenshot-01.png` at t="));
+
+  // Decision 26: DevTools device mode (iPhone SE, touch) stacks the image over the panel; leaving it while open keeps shapes in place.
+  await startRecording(ctx, extId, sw, page);
+  // Make the fixture responsive like the reported app page; otherwise mobile emulation widens the layout viewport to its content.
+  await page.evaluate(() => document.head.insertAdjacentHTML("beforeend", '<meta name="viewport" content="width=device-width, initial-scale=1"><style>body * { max-width: 100%; box-sizing: border-box; }</style>'));
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 375, height: 667, deviceScaleFactor: 2, mobile: true });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  await page.waitForFunction(() => document.documentElement.clientWidth === 375);
+  const ned = page.locator("record2context-ui .ed");
+  await page.keyboard.press("Alt+Shift+KeyS");
+  await page.waitForFunction(() => document.querySelector("record2context-ui")?.shadowRoot?.querySelector(".ed canvas")?.width > 0);
+  await page.waitForTimeout(200);
+  const narrow = await editorBoxes(page);
+  check(
+    "375px: image on top at full width, panel below it, toolbar clear of both",
+    narrow.vw === 375 && narrow.canvas.w >= 300 && sameRect(narrow.canvas, narrow.img) && narrow.side.y >= narrow.stage.bottom - 1 && narrow.bar.bottom <= narrow.body.y + 1 && narrow.cont.bottom <= narrow.bar.bottom && narrow.cont.right <= 375,
+    JSON.stringify(narrow),
+  );
+  await page.screenshot({ path: join(ARTIFACTS, "editor-375.png") });
+  /** Drag on the canvas between image fractions; `touch` sends real touch events, as DevTools device mode does for the mouse. */
+  const drawBox = async (from, to, { touch = false } = {}) => {
+    const b = await ned.locator("canvas").boundingBox();
+    const pt = ([fx, fy]) => ({ x: b.x + b.width * fx, y: b.y + b.height * fy });
+    if (!touch) {
+      await page.mouse.move(pt(from).x, pt(from).y);
+      await page.mouse.down();
+      await page.mouse.move(pt(to).x, pt(to).y, { steps: 8 });
+      await page.mouse.up();
+      return;
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt(from)] });
+    for (let i = 1; i <= 8; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [pt([from[0] + ((to[0] - from[0]) * i) / 8, from[1] + ((to[1] - from[1]) * i) / 8])] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  await ned.locator('button[data-tool="box"]').click();
+  await drawBox([0.2, 0.1], [0.7, 0.3], { touch: true });
+  check("375px: a box drawn by a touch drag is added", (await ned.locator(".shapes li").count()) === 1);
+  await page.mouse.move(narrow.stage.x + narrow.stage.w / 2, narrow.body.y + 50);
+  await page.mouse.wheel(0, 600);
+  await page.waitForTimeout(300);
+  check("375px: the wheel scrolls the editor down to the panel", (await editorBoxes(page)).scrollTop > 0);
+
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+  await cdp.send("Emulation.clearDeviceMetricsOverride");
+  await page.waitForFunction(() => innerWidth === 1280);
+  await page.waitForTimeout(200);
+  const back = await editorBoxes(page);
+  check("back to 1280 while open: panel beside the image again, canvas over the image", near(back.side.w, 312) && back.side.x >= back.stage.right - 1 && sameRect(back.canvas, back.img) && back.canvas.w > narrow.canvas.w, JSON.stringify(back));
+  await drawBox([0.3, 0.6], [0.8, 0.9]);
+  await page.screenshot({ path: join(ARTIFACTS, "editor-375-then-1280.png") });
+  await ned.locator("button.continue").click();
+  await ned.waitFor({ state: "detached", timeout: 10000 });
+  await page.locator("record2context-ui button.mark:not([disabled])").waitFor({ timeout: 10000 });
+  await stopViaHud(page);
+  const r2 = readReport(await waitForOutput(env));
+  const nshot = r2.screenshots.find((s) => s.mark === 1);
+  const nev = r2.events.find((e) => e.type === "screenshot" && e.mark === 1);
+  const [n1, n2] = nshot?.annotations ?? [];
+  const at2 = (g, fx, fy, fw, fh) => near(g.x, fx * nev.imageWidth, 4) && near(g.y, fy * nev.imageHeight, 4) && near(g.width, fw * nev.imageWidth, 4) && near(g.height, fh * nev.imageHeight, 4);
+  check(
+    "shapes drawn before and after the resize land where they were drawn on the image",
+    nshot?.annotations?.length === 2 && at2(n1.geometry.image, 0.2, 0.1, 0.5, 0.2) && at2(n2.geometry.image, 0.3, 0.6, 0.5, 0.3),
+    JSON.stringify({ w: nev?.imageWidth, h: nev?.imageHeight, g: nshot?.annotations?.map((a) => a.geometry.image) }),
+  );
 } catch (e) {
   check("no exception", false, e.stack);
 } finally {

@@ -52,6 +52,12 @@ const CSS = `
 .shapes input { all: unset; grid-column: 1 / -1; box-sizing: border-box; width: 100%; padding: 5px 8px; border-radius: 6px; background: #111827;
   color: #f9fafb; font: 400 13px/1.3 -apple-system, system-ui, "Noto Sans Thai", sans-serif; cursor: text; }
 .empty, .hint { color: #9ca3af; font-weight: 500; margin: 0; }
+/* Narrow viewports (DevTools device mode): a 300px side column would leave the image ~60px wide, so stack them. */
+@media (max-width: 640px) {
+  .body { flex-direction: column; overflow: auto; }
+  .stage { flex: none; aspect-ratio: var(--ar); }
+  .side { width: auto; overflow: visible; padding: 0 12px 12px; }
+}
 `;
 
 function drawShape(ctx: CanvasRenderingContext2D, s: { tool: ShapeKind; points: Pt[]; color: string }, width: number): void {
@@ -129,7 +135,9 @@ export function openEditor(root: ShadowRoot, src: string, opts: EditorOptions): 
       </div>`;
     root.appendChild(wrap);
     const ed = wrap.querySelector<HTMLElement>(".ed")!;
+    const body = wrap.querySelector<HTMLElement>(".body")!;
     const stage = wrap.querySelector<HTMLElement>(".stage")!;
+    const side = wrap.querySelector<HTMLElement>(".side")!;
     const img = wrap.querySelector("img")!;
     const canvas = wrap.querySelector("canvas")!;
     const ctx = canvas.getContext("2d")!;
@@ -148,7 +156,16 @@ export function openEditor(root: ShadowRoot, src: string, opts: EditorOptions): 
     for (const type of ["keydown", "keyup", "keypress", "pointerdown", "mousedown", "pointerup", "mouseup", "click", "input", "beforeinput", "paste", "copy", "cut"]) {
       ed.addEventListener(type, (e) => e.stopPropagation());
     }
-    ed.addEventListener("wheel", (e) => (e.stopPropagation(), e.preventDefault()), { passive: false });
+    // The page behind must not scroll, so the editor's own scrollers are scrolled by hand.
+    ed.addEventListener(
+      "wheel",
+      (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        [side, body].find((x) => x.contains(e.target as Node) && x.scrollHeight > x.clientHeight)?.scrollBy(0, e.deltaY);
+      },
+      { passive: false },
+    );
 
     const swatches = wrap.querySelector<HTMLElement>(".swatches")!;
     for (const s of SWATCHES) {
@@ -237,8 +254,10 @@ export function openEditor(root: ShadowRoot, src: string, opts: EditorOptions): 
       const r = canvas.getBoundingClientRect();
       return { x: ((e.clientX - r.left) / r.width) * canvas.width, y: ((e.clientY - r.top) / r.height) * canvas.height };
     };
+    // Not window resize: the stage also changes size when the narrow layout's scrollbar comes and goes.
+    const resized = new ResizeObserver(layout);
     const finish = (result: EditedShot) => {
-      window.removeEventListener("resize", layout);
+      resized.disconnect();
       wrap.remove();
       resolve(result);
     };
@@ -262,12 +281,13 @@ export function openEditor(root: ShadowRoot, src: string, opts: EditorOptions): 
     img.onload = () => {
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
+      stage.style.setProperty("--ar", `${img.naturalWidth} / ${img.naturalHeight}`);
       layout();
       if (!ed.contains(root.activeElement)) noteBox.focus({ preventScroll: true });
     };
     img.onerror = () => save();
     img.src = src;
-    window.addEventListener("resize", layout);
+    resized.observe(stage);
     noteBox.focus({ preventScroll: true });
     noteBox.addEventListener("input", () => opts.onNoteInput?.(noteBox.value));
     noteBox.addEventListener("keydown", (e) => {
