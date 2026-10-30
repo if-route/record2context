@@ -296,6 +296,16 @@ describe("protocol", () => {
     expect(await handle({ id: 3, op: "read", session: "s", path: "nope.txt" })).toMatchObject({ ok: false, code: "not-found" });
   });
 
+  it("reads the private folder inside a session for the Recordings page, and nothing past the session through it", async () => {
+    const priv = "details/private-do-not-share/storage/01-start.json";
+    await handle({ id: 1, op: "write", session: "s", path: priv, offset: 0, data: b64('{"local":{}}'), done: true });
+    fs.writeFileSync(path.join(tmp, "outside.json"), "secret");
+    expect(Buffer.from((await handle({ id: 2, op: "read", session: "s", path: priv })).data, "base64").toString()).toBe('{"local":{}}');
+    expect(await handle({ id: 3, op: "read", session: "s", path: "details/private-do-not-share/bodies/b1-1.json" })).toMatchObject({ ok: false, code: "not-found" });
+    for (const bad of ["details/private-do-not-share/../../../outside.json", "details/private-do-not-share/storage/../../../../outside.json"])
+      expect(await handle({ id: 4, op: "read", session: "s", path: bad })).toMatchObject({ ok: false, code: "path" });
+  });
+
   it("deletes a session folder, and says when it was not there", async () => {
     await handle({ id: 1, op: "write", session: "s", path: "screenshots/01.png", offset: 0, data: b64("x"), done: true });
     expect(await handle({ id: 2, op: "delete", session: "s" })).toMatchObject({ ok: true, existed: true });

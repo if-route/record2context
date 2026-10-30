@@ -1,5 +1,7 @@
 import { fmtVideoTime } from "../shared/format";
+import { PRIVATE_NOTE, bodiesLine, bodyPartLabel, prettyBody, readBodies, readPrivateSnapshot, snapshotLabel, storageNote, storageView, type AreaView, type ReadFile } from "../shared/private-view";
 import type { Report } from "../shared/report";
+import type { RawSnapshot } from "../shared/storage-snapshot";
 import { buildMarkers, eventLabel, isNetworkError, isXhrOrFetch, MARKER_KINDS, markerKind, nearestRow, shortUrl, timeToPercent } from "../shared/timeline";
 import type { Annotation, ConsoleErrorEvent, MarkEvent, NetworkEvent, RecEvent, ScreenshotEvent } from "../shared/types";
 import { clear, h, longText, scrollWithin } from "./dom";
@@ -24,7 +26,8 @@ function annotationList(list: Annotation[] | undefined): HTMLElement | null {
   );
 }
 
-type Tab = "events" | "network" | "console" | "screenshots";
+type Tab = "events" | "network" | "console" | "screenshots" | "storage";
+type Snapshot = Report["storage"][number];
 type NetFilter = "all" | "errors" | "xhr";
 
 interface Rows {
@@ -32,12 +35,17 @@ interface Rows {
   els: HTMLElement[];
 }
 
-/** Video, marker timeline and the time-synced Events / Network / Console / Screenshots tabs. */
+/** Video, marker timeline and the time-synced Events / Network / Console / Screenshots / Storage tabs. */
 export class Player {
   readonly el: HTMLElement;
   readonly video: HTMLVideoElement;
   private readonly durationMs: number;
   private readonly events: RecEvent[];
+  private readonly snapshots: Snapshot[];
+  private readonly bodies: string | null;
+  /** The unredacted snapshots, read once when the Storage tab first opens. */
+  private raws: (RawSnapshot | null)[] | null = null;
+  private rawsLoading = false;
   private readonly playhead = h("div", { class: "playhead" });
   private readonly timeLabel = h("span", { class: "time-label" }, "0:00.0");
   private readonly markerEls: { t: number; el: HTMLElement }[] = [];
@@ -52,12 +60,18 @@ export class Player {
   private raf = 0;
   private listeners: ((ms: number) => void)[] = [];
 
-  /** `fileUrl` turns a path inside the session (`<id>.webm`, `screenshots/01.png`) into a URL the page can load ("" if not). */
+  /**
+   * `fileUrl` turns a path inside the session (`<id>.webm`, `screenshots/01.png`) into a URL the page can load ("" if not).
+   * `readPrivate` reads the private folder's files; what it returns is only ever shown on this page.
+   */
   constructor(
     report: Report,
     private readonly fileUrl: (file: string) => string,
+    private readonly readPrivate: ReadFile,
   ) {
     this.events = report.events as RecEvent[];
+    this.snapshots = report.storage ?? [];
+    this.bodies = bodiesLine(report.privateData);
     this.durationMs = report.durationMs;
     this.video = h("video", { controls: true, preload: "auto", src: report.video ? fileUrl(report.video.file) : "" });
     this.el = h("div", { class: "player" }, h("div", { class: "video-wrap" }, this.video), this.buildTimeline(), this.buildMarks(), this.buildTabs(), this.panel);
@@ -145,6 +159,7 @@ export class Player {
       ["network", "Network", count((e) => e.type === "network")],
       ["console", "Console", count((e) => e.type === "console_error")],
       ["screenshots", "Screenshots", count((e) => e.type === "screenshot")],
+      ["storage", "Storage", this.snapshots.length],
     ];
     const bar = h("div", { class: "tabs", role: "tablist" });
     for (const [tab, label, n] of tabs) {
@@ -202,25 +217,37 @@ export class Player {
           filters.map(([f, label]) => h("button", { class: f === this.netFilter ? "active" : "", "data-filter": f, onclick: () => ((this.netFilter = f), this.renderTab()) }, label)),
         ),
       );
+      if (this.bodies) this.panel.append(h("p", { class: "hint dim", "data-testid": "bodies-line" }, this.bodies));
       const net = this.events.filter((e): e is NetworkEvent => e.type === "network");
       list = net
         .filter((e) => (this.netFilter === "errors" ? isNetworkError(e) : this.netFilter === "xhr" ? isXhrOrFetch(e) : true))
-        .map((e) => ({
-          t: e.t,
-          el: this.row(
+        .map((e) => {
+          const body = e.bodyId ? h("button", { type: "button", class: "small", "aria-expanded": "false" }, "Body") : null;
+          const el = this.row(
             e.t,
             isNetworkError(e) ? "err" : "",
             h("span", { class: "method" }, e.method || "—"),
             h("span", { class: `status ${isNetworkError(e) ? "bad" : ""}` }, e.status || "0"),
             h("span", { class: "main" }, longText(e.url, 90, shortUrl(e.url, 1000))),
+            body ?? "",
             h("span", { class: "dur" }, `${e.durationMs} ms`),
             h("span", { class: "src" }, e.source),
-          ),
-        }));
+          );
+          body?.addEventListener("click", (ev) => (ev.stopPropagation(), this.toggleBody(el, body, e.bodyId!)));
+          return { t: e.t, el };
+        });
     } else if (this.tab === "console") {
       list = this.events
         .filter((e): e is ConsoleErrorEvent => e.type === "console_error")
         .map((e) => ({ t: e.t, el: this.row(e.t, "err", h("span", { class: "type" }, e.source), h("span", { class: "main" }, e.message, e.stack ? h("pre", {}, e.stack) : null)) }));
+    } else if (this.tab === "storage") {
+      if (!this.raws) this.loadRaws();
+      else {
+        const raws = this.raws;
+        const note = storageNote(this.snapshots.flatMap((s, i) => (s.error ? [] : [raws[i] ? "private" : "redacted"])));
+        if (note) this.panel.append(h("p", { class: "hint private-note" }, note));
+        list = this.snapshots.map((s, i) => ({ t: s.t, el: this.snapshotBlock(s, raws[i] ?? null) }));
+      }
     } else {
       list = this.events
         .filter((e): e is ScreenshotEvent => e.type === "screenshot")
@@ -236,11 +263,86 @@ export class Player {
     }
 
     const box = h("div", { class: `list list-${this.tab}` });
-    if (list.length === 0) box.append(h("p", { class: "empty" }, "Nothing recorded."));
+    const reading = this.tab === "storage" && !this.raws && this.snapshots.length > 0;
+    if (list.length === 0) box.append(h("p", { class: "empty" }, reading ? "Reading the snapshots…" : "Nothing recorded."));
     for (const r of list) box.append(r.el);
     this.panel.append(box);
     this.rows = { times: list.map((r) => r.t), els: list.map((r) => r.el) };
     this.sync(true);
+  }
+
+  private loadRaws() {
+    if (this.rawsLoading) return;
+    this.rawsLoading = true;
+    void Promise.all(this.snapshots.map((s) => readPrivateSnapshot(s, this.readPrivate))).then((raws) => {
+      this.raws = raws;
+      if (this.tab === "storage") this.renderTab();
+    });
+  }
+
+  private snapshotBlock(s: Snapshot, raw: RawSnapshot | null): HTMLElement {
+    const v = storageView(s, raw);
+    const area = (name: string, a: AreaView | undefined) =>
+      a
+        ? h(
+            "div",
+            { class: "area" },
+            h("div", { class: "area-head" }, `${name} · ${a.keys} key${a.keys === 1 ? "" : "s"}`, a.rows.length < a.keys ? ` (first ${a.rows.length} read)` : "", a.error ? h("span", { class: "bad" }, ` · not read: ${a.error}`) : ""),
+            a.rows.length
+              ? h(
+                  "table",
+                  { class: "kv" },
+                  a.rows.map((r) => h("tr", {}, h("td", { class: "k" }, r.key), h("td", {}, longText(r.value, 160)), h("td", { class: "dim" }, r.note ?? ""))),
+                )
+              : "",
+          )
+        : "";
+    return h(
+      "div",
+      { class: "row snap", "data-testid": "snapshot" },
+      h(
+        "div",
+        { class: "snap-head", onclick: () => this.seek(s.t), title: "Seek video here" },
+        h("span", { class: "t" }, fmtVideoTime(s.t)),
+        h("b", {}, snapshotLabel(s.label)),
+        s.origin ? h("span", { class: "dim" }, s.origin) : "",
+        s.error
+          ? ""
+          : h(
+              "span",
+              { class: `source ${v.source}`, "data-testid": "storage-source", "data-source": v.source },
+              v.source === "private" ? "Private: unredacted" : "Redacted, as in report.json (private file not found)",
+            ),
+      ),
+      s.error ? h("p", { class: "bad" }, `Not read: ${s.error}`) : "",
+      area("localStorage", v.local),
+      area("sessionStorage", v.session),
+      s.error ? "" : h("div", { class: "area-head" }, `Cookie names (values are never read): ${v.cookieError ? `not read: ${v.cookieError}` : v.cookieNames.join(", ") || "none"}`),
+    );
+  }
+
+  /** Opens or closes the call's bodies right under its row. */
+  private toggleBody(row: HTMLElement, button: HTMLButtonElement, bodyId: string) {
+    const open = row.nextElementSibling;
+    if (open?.classList.contains("body-view")) {
+      open.remove();
+      button.setAttribute("aria-expanded", "false");
+      return;
+    }
+    button.setAttribute("aria-expanded", "true");
+    const view = h("div", { class: "body-view", "data-testid": "body-view" }, h("p", { class: "dim" }, "Reading…"));
+    row.after(view);
+    void readBodies(bodyId, this.readPrivate).then((rec) => {
+      if (!rec) return view.replaceChildren(h("p", { class: "empty" }, `Could not read the body file (bodies/${bodyId}.json); it may have been deleted.`));
+      view.replaceChildren(h("p", { class: "hint private-note" }, PRIVATE_NOTE));
+      for (const [name, part] of [
+        ["Request", rec.request],
+        ["Response", rec.response],
+      ] as const) {
+        view.append(h("div", { class: "area-head" }, bodyPartLabel(name, part)));
+        if (part?.text !== undefined) view.append(h("pre", { class: "body" }, prettyBody(part.text)));
+      }
+    });
   }
 
   private sync(force = false) {

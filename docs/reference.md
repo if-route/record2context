@@ -81,7 +81,9 @@ The popup shows where recordings go (or the setup line) and your latest recordin
 
 It never says a file is there unless it could read it. Each row has **Open**, the copy buttons, **Show folder**, **Save to folder** (when useful) and **Delete**. You can also tick several and **Delete selected**, **Remove missing from list** or **Clear list** (forgets every entry; the files stay).
 
-**Open** plays the recording: the video, a timeline with a colour-coded marker for every mark, click, input, key, page load or route change, screenshot, network error and console error, your marks with their notes and screenshots, and Events / Network / Console / Screenshots tabs (each screenshot with its numbered shapes and notes). Click a marker, a mark or a row to seek; with **Follow playback** on, the row nearest the video time is highlighted and scrolled into view. Long URLs are shortened with a **more** toggle. Files are read from the extension's storage first, else from your folder through the helper.
+**Open** plays the recording: the language, locale and time zone at Start, the video, a timeline with a colour-coded marker for every Screenshot, click, input, key, page load or route change, network error and console error, your Screenshots with their notes and images, and Events / Network / Console / Screenshots / Storage tabs (each screenshot with its numbered shapes and notes). Click a marker, a Screenshot or a row to seek; with **Follow playback** on, the row nearest the video time is highlighted and scrolled into view. Long URLs are shortened with a **more** toggle. Files are read from the extension's storage first, else from your folder through the helper.
+
+The page also shows what is kept in `details/private-do-not-share/`, labelled as private: **Storage** lists each snapshot (Start, each Screenshot, Stop) with its localStorage and sessionStorage entries and cookie names, unredacted from the snapshot's private file, or the redacted report.json values (labelled so) when that file cannot be read. In **Network**, a call whose bodies were kept has a **Body** button that opens its request and response (JSON indented), and a line above the list gives the body counts from `report.privateData`. None of this is ever added to Copy portable context, Copy for my AI, context.md or report.json.
 
 ## Output
 
@@ -258,7 +260,9 @@ node e2e/annotate.e2e.mjs    # Screenshot → editor → two shapes with notes a
                              # stroke; shapes, elements, colours and both PNGs in report.json / context.md
 node e2e/tab-close.e2e.mjs   # closing the recorded tab still saves everything (the Stop snapshot records why it has no data)
 node e2e/data.e2e.mjs        # storage snapshots, cookie names, locale, bodies only in the private folder (none in report.json,
-                             # context.md or the portable context), streaming fetch still works, old-layout recording plays
+                             # context.md or the portable context), streaming fetch still works, old-layout recording plays,
+                             # the Recordings page shows the private data (also through the helper, redacted without it)
+                             # and its copy buttons hold none of it
 node e2e/popup.e2e.mjs       # popup: no helper (setup line + prompt, recording kept), helper installed (folder line, waiting
                              # recording copied by itself), latest readable recording, Delete both copies
 node e2e/recordings.e2e.mjs  # Recordings page: list, player from OPFS and from the folder through the helper (markers, seek, synced

@@ -1,6 +1,6 @@
 import type { NetworkEvent, RecEvent } from "./types";
 
-export type MarkerKind = "mark" | "click" | "input" | "key" | "nav" | "screenshot" | "net-error" | "console-error";
+export type MarkerKind = "mark" | "click" | "input" | "key" | "nav" | "net-error" | "console-error";
 
 export interface Marker {
   t: number;
@@ -16,7 +16,6 @@ export const MARKER_KINDS: { kind: MarkerKind; label: string }[] = [
   { kind: "input", label: "Input" },
   { kind: "key", label: "Key" },
   { kind: "nav", label: "Page load / route" },
-  { kind: "screenshot", label: "Screenshot (no pause)" },
   { kind: "net-error", label: "Network error" },
   { kind: "console-error", label: "Console error" },
 ];
@@ -38,9 +37,10 @@ export function markerKind(e: RecEvent): MarkerKind | null {
     case "input":
     case "key":
       return e.type;
-    // A Mark's own screenshot sits at the mark's t; the mark marker stands for both.
+    // A Mark's own screenshot sits at the mark's t; the mark marker stands for both. One without a mark comes only from
+    // a recording made before Screenshot replaced the separate button, and shows as a Screenshot too.
     case "screenshot":
-      return e.mark ? null : "screenshot";
+      return e.mark ? null : "mark";
     case "page_load":
     case "route_change":
       return "nav";

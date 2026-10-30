@@ -1,8 +1,9 @@
 // Page data (Decisions 15-16): storage snapshots, cookie names, locale, request/response bodies in the private folder
 // only; the top level holds only what a tester uploads; a page reading streaming fetch still works while recording;
-// a recording in the old layout (before details/) still plays and copies.
+// a recording in the old layout (before details/) still plays and copies; the Recordings page shows the private data
+// (Decision 25), through the helper too, falls back to the redacted values without it, and copies none of it.
 // Run: npm run build && node e2e/data.e2e.mjs
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { startServer } from "./server.mjs";
 import { ROOT, launch, log, markViaHud, readReport, startRecording, stopViaHud, waitForOutput } from "./lib.mjs";
@@ -118,6 +119,92 @@ try {
   const readme = readFileSync(join(dir, "details", "AI-README.md"), "utf8");
   check("AI-README.md holds none of it, and names the private folder", !leaks(readme).length && readme.includes("details/private-do-not-share/"), leaks(readme).join(", "));
 
+  // ── The Recordings page shows the private data and copies none of it (Decision 25) ──
+  const vp = await ctx.newPage();
+  const openViewer = async (rid) => {
+    await vp.goto(`chrome-extension://${extId}/recordings.html#/r/${encodeURIComponent(rid)}`);
+    await vp.reload();
+    await vp.locator(".player").waitFor({ timeout: 10000 });
+  };
+  const storageTab = async () => {
+    await vp.getByRole("tab", { name: /Storage/ }).click();
+    await vp.locator('[data-testid="snapshot"]').nth(2).waitFor({ timeout: 10000 });
+    return {
+      sources: await vp.locator('[data-testid="storage-source"]').evaluateAll((els) => els.map((e) => e.dataset.source)),
+      text: await vp.locator(".list-storage").innerText(),
+    };
+  };
+  const openBody = async (urlPart) => {
+    await vp.getByRole("tab", { name: /Network/ }).click();
+    const row = vp.locator(".list-network .row").filter({ hasText: urlPart }).filter({ has: vp.getByRole("button", { name: "Body" }) }).first();
+    await row.getByRole("button", { name: "Body" }).click();
+    const view = vp.locator('[data-testid="body-view"]').first();
+    await view.locator(".private-note, .empty").first().waitFor({ timeout: 10000 });
+    return view.innerText();
+  };
+  await openViewer(id);
+  const browserText = await vp.locator('[data-testid="browser-line"]').innerText();
+  check("viewer: language, locale and time zone shown", browserText.includes(`time zone ${report.browser.timeZone}`) && browserText.includes(`locale ${report.browser.locale}`), browserText);
+  const legend = await vp.locator(".legend").innerText();
+  check('viewer: no "Screenshot (no pause)" in the legend', !legend.includes("no pause") && legend.includes("Screenshot"), legend);
+  check("viewer: a Storage tab with one entry per snapshot", /^Storage\s*3$/.test((await vp.getByRole("tab", { name: /Storage/ }).innerText()).trim()));
+  const st = await storageTab();
+  check("viewer Storage: Start, Screenshot 1 and Stop, each from its private file", JSON.stringify(st.sources) === '["private","private","private"]' && /Start[\s\S]*Screenshot 1[\s\S]*Stop/.test(st.text), JSON.stringify(st.sources));
+  check("viewer Storage: unredacted values, cookie names but no cookie values", st.text.includes("SECRET-LS-TOKEN-1") && st.text.includes("SECRET-SS-CSRF-2") && st.text.includes("sid, prefs") && !st.text.includes("SECRET-COOKIE-VALUE"));
+  const note = await vp.locator(".private-note").first().innerText();
+  check("viewer Storage: says the values are private and never in the copied context", note.includes("stays on this computer") && note.includes("never part of Copy portable context"), note);
+  await vp.getByRole("tab", { name: /Network/ }).click();
+  const bodiesText = await vp.locator('[data-testid="bodies-line"]').innerText();
+  check("viewer Network: report.privateData body counts shown", bodiesText.startsWith(`Bodies kept for ${report.privateData.bodies.saved} calls`), bodiesText);
+  const body1 = await openBody("/api/echo?n=1");
+  check("viewer Network: Body opens the request and response, JSON pretty-printed, marked private", body1.includes("REQUEST-BODY-MARKER-1") && body1.includes("RESPONSE-BODY-MARKER-1") && /\{\n  "/.test(body1) && body1.includes("stays on this computer"), body1.slice(0, 300));
+  const preScroll = await vp.locator('[data-testid="body-view"] pre.body').first().evaluate((e) => getComputedStyle(e).overflowY);
+  check("viewer Network: a body scrolls inside its own box", preScroll === "auto", preScroll);
+  await vp.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (t) => void window.__copied.push(t);
+  });
+  await vp.locator(".head").getByRole("button", { name: "Copy portable context" }).click();
+  await vp.locator(".head").getByRole("button", { name: "Copy for my AI" }).click();
+  await vp.waitForTimeout(300);
+  const viewerCopies = await vp.evaluate(() => window.__copied);
+  check("viewer: after showing the private data, Copy portable context and Copy for my AI hold none of it", viewerCopies.length === 2 && viewerCopies[0] === contextMd && !leaks(viewerCopies.join("\n")).length, leaks(viewerCopies.join("\n")).join(", "));
+
+  // ── The same recording only on disk: private data through the helper, then without its private folder ──
+  const copyId = "2026-01-03_040506_private-copy";
+  const copyDir = join(env.folderPath, copyId);
+  cpSync(dir, copyDir, { recursive: true });
+  await sw.evaluate(
+    async ({ copyId, copyDir }) => {
+      const { recent = [] } = await chrome.storage.local.get("recent");
+      recent.push({ id: copyId, host: "copy.test", startedAt: "2026-01-03T04:05:06.000Z", durationMs: 3000, marks: 1, context: "copy context", emailsMasked: true, paths: ["details/report.json", "details/AI-README.md"], folderCopy: { dir: copyDir } });
+      await chrome.storage.local.set({ recent });
+    },
+    { copyId, copyDir },
+  );
+  await openViewer(copyId);
+  const viaHelper = await storageTab();
+  check("on disk only: private snapshots read through the helper", JSON.stringify(viaHelper.sources) === '["private","private","private"]' && viaHelper.text.includes("SECRET-LS-TOKEN-1"), JSON.stringify(viaHelper.sources));
+  check("on disk only: a body read through the helper", (await openBody("/api/echo?n=3")).includes("REQUEST-BODY-MARKER-3"));
+  const storageDir = join(copyDir, "details", "private-do-not-share", "storage");
+  const [startFile, , stopFile] = readdirSync(storageDir).sort();
+  const cookieError = "SecurityError: The document is sandboxed and lacks the 'allow-same-origin' flag.";
+  writeFileSync(join(storageDir, startFile), JSON.stringify({ ...JSON.parse(readFileSync(join(storageDir, startFile), "utf8")), cookieNames: [], cookieError }));
+  rmSync(join(storageDir, stopFile));
+  await openViewer(copyId);
+  const mixed = await storageTab();
+  const mixedNote = await vp.locator(".private-note").first().innerText();
+  check("one private file gone: the note says some are private and the others redacted", JSON.stringify(mixed.sources) === '["private","private","redacted"]' && mixedNote.includes("the others are redacted"), `${JSON.stringify(mixed.sources)} ${mixedNote}`);
+  check("cookie names not read: says why, not none", mixed.text.includes(`Cookie names (values are never read): not read: ${cookieError}`), mixed.text.match(/Cookie names[^\n]*/)?.[0]);
+  rmSync(join(copyDir, "details", "private-do-not-share"), { recursive: true, force: true });
+  await openViewer(copyId);
+  const noPrivate = await storageTab();
+  check("private folder deleted: no note claims unredacted data", (await vp.locator(".private-note").count()) === 0);
+  check("private folder deleted: the redacted report.json values, labelled so", JSON.stringify(noPrivate.sources) === '["redacted","redacted","redacted"]' && noPrivate.text.includes("[REDACTED]") && !noPrivate.text.includes("SECRET-LS-TOKEN-1") && noPrivate.text.includes("private file not found"), JSON.stringify(noPrivate.sources));
+  const gone = await openBody("/api/echo?n=1");
+  check("private folder deleted: Body says the file could not be read", gone.includes("Could not read the body file"), gone);
+  await vp.close();
+
   // ── A recording in the old layout, on disk only: still listed, played and copied ──
   const oldId = "2026-01-02_030405_old-layout";
   const oldDir = join(env.folderPath, oldId);
@@ -164,6 +251,8 @@ try {
   await thumb.waitFor({ timeout: 5000 });
   const w = await thumb.evaluate((i) => (i.complete ? i.naturalWidth : new Promise((res) => ((i.onload = () => res(i.naturalWidth)), (i.onerror = () => res(0))))));
   check("old layout: the mark's screenshot shows", w > 0, String(w));
+  await rp.getByRole("tab", { name: /Storage/ }).click();
+  check("old layout: the Storage tab says nothing was recorded", (await rp.locator(".list-storage .empty").innerText()) === "Nothing recorded.");
 } catch (e) {
   check("no exception", false, e.stack);
 } finally {

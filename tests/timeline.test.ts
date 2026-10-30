@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fmtVideoTime } from "../src/shared/format";
-import { buildMarkers, eventLabel, isNetworkError, markerKind, nearestRow, timeToPercent } from "../src/shared/timeline";
+import { MARKER_KINDS, buildMarkers, eventLabel, isNetworkError, markerKind, nearestRow, timeToPercent } from "../src/shared/timeline";
 import type { NetworkEvent, RecEvent } from "../src/shared/types";
 
 const vp = { width: 1280, height: 800, dpr: 1, scrollX: 0, scrollY: 0 };
@@ -49,10 +49,15 @@ describe("markers from report.json", () => {
       [7000, "click"],
       [7400, "net-error"],
       [7450, "console-error"],
-      [9000, "screenshot"],
+      [9000, "mark"],
       [9500, "mark"],
       [10_000, "nav"],
     ]);
+  });
+
+  it("the legend has no kind nothing produces any more; an old screenshot without a mark shows as a Screenshot", () => {
+    expect(MARKER_KINDS.map((k) => k.label)).toEqual(["Screenshot", "Click", "Input", "Key", "Page load / route", "Network error", "Console error"]);
+    expect(markerKind(EVENTS.find((e) => e.type === "screenshot" && !e.mark)!)).toBe("mark");
   });
 
   it("a Mark's own screenshot has no marker of its own (it would cover the mark's)", () => {
@@ -73,7 +78,7 @@ describe("markers from report.json", () => {
   });
 
   it("labels a mark with the first line of its note; a pause has no marker", () => {
-    expect(buildMarkers(EVENTS).find((m) => m.kind === "mark")?.label).toBe("Screenshot 1: Total is wrong");
+    expect(buildMarkers(EVENTS).find((m) => m.t === 9500)?.label).toBe("Screenshot 1: Total is wrong");
     const pause = EVENTS.find((e) => e.type === "pause")!;
     expect(markerKind(pause)).toBeNull();
     expect(eventLabel(pause)).toBe("Paused for 4.2 s (not in the video)");

@@ -32,7 +32,7 @@ main (src/main)             page-world fetch/XHR/history/console.error wrappers;
 - `host/record2context-host.mjs` is the helper: framing, config (`recordingsDir`), path safety, the ops (`ping`, `write`, `finish`, `list`, `read`, `delete`, `reveal`, `selftest`), `status.json`. `host/install.mjs` installs it (launcher with absolute `node`, config, host manifest; idempotent), `host/verify.mjs` is `npm run verify-install`, `host/common.mjs` holds the names, locations and the extension id from the manifest `key`.
 - `src/shared/recent.ts` is the recording list (entries with `paths` and `folderCopy.dir`, the absolute folder the helper reported), where-state text, and the "Copy for my AI" text. `session-actions.ts` holds the buttons the popup and the Recordings page share (Show folder asks the helper to open Finder) and the setup line.
 - `src/shared/annotations.ts` is the shape model: swatches, numbering, geometry in image and CSS px, badge placement, the probe point. `src/content/editor.ts` draws it; `src/content/element-info.ts` describes the element under a box's centre or an arrow's tip.
-- `src/shared/timeline.ts` builds the player's markers and row labels; `src/recordings/player.ts` is the player.
+- `src/shared/timeline.ts` builds the player's markers and row labels; `src/recordings/player.ts` is the player. `private-view.ts` reads and formats the private folder (storage snapshots, bodies) for the Recordings page only; nothing that builds report.json, context.md, AI-README or copied text may import it (`tests/private-view.test.ts` checks).
 - `tests/` vitest unit tests. `e2e/` Playwright end-to-end tests against `e2e/fixtures/index.html`.
 
 ## Where to customise
@@ -58,7 +58,7 @@ main (src/main)             page-world fetch/XHR/history/console.error wrappers;
 | The HUD (buttons, note box, countdown) | `src/content/ui.ts`; behaviour in `src/content/index.ts` |
 | How `t` is lined up with the video (t=0, pause cuts, picture lag) | `src/shared/clock-sync.ts` and `lagAt` / `videoTime` in `src/shared/clock.ts` (+ `tests/clock-sync.test.ts`) |
 | Keyboard shortcuts and where their keys are shown | `commands` in `static/manifest.json`, `COMMANDS` in `src/shared/shortcuts.ts` (+ `tests/shortcuts.test.ts`), `isScreenshotShortcut` in `src/content/index.ts` |
-| The Recordings page or the player | `src/recordings/` and `static/recordings.css`; markers and labels in `src/shared/timeline.ts` (+ `tests/timeline.test.ts`) |
+| The Recordings page or the player | `src/recordings/` and `static/recordings.css`; markers and labels in `src/shared/timeline.ts` (+ `tests/timeline.test.ts`); what it shows from the private folder in `src/shared/private-view.ts` (+ `tests/private-view.test.ts`, `e2e/data.e2e.mjs`) |
 | What Delete removes, when a recording counts as missing | `deleteSessionFiles` / `locate` in `src/shared/store.ts`, `whereState` in `src/shared/recent.ts` (+ `tests/recent.test.ts`) |
 
 ## Build and test

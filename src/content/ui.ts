@@ -224,7 +224,7 @@ export class RecorderUI {
     this.tick();
   }
 
-  /** Paused: the note box shows (with `draft`) unless the Mark editor takes the note, the timer freezes, Screenshot and Mark are off. */
+  /** Paused: the note box shows (with `draft`) unless the Mark editor takes the note, the timer freezes, the Screenshot button is off. */
   setPaused(paused: boolean, draft = "", noteBox = true): void {
     this.countdownEl.classList.add("off");
     this.hud.classList.toggle("paused", paused);

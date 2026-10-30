@@ -3,6 +3,7 @@
 import { fmtDuration, fmtLocalTime } from "../shared/format";
 import type { DeleteResult } from "../shared/messages";
 import { HostClient, HostRequestError, HostUnavailable, type HostState } from "../shared/host";
+import { browserLine } from "../shared/private-view";
 import { RECENT_KEY, WHERE_TEXT, isGone, isReadable, whereState, type RecentSession, type WhereState } from "../shared/recent";
 import type { Report } from "../shared/report";
 import { actionButton, copyButtons, deleteButton, deleteRecordings, deleteSummary, saveToFolderButton, setupLine, storedContext } from "../shared/session-actions";
@@ -238,7 +239,9 @@ async function renderRecording(r: RecentSession): Promise<void> {
     urls.set(file, u);
   }
   if (openId !== r.id) return;
-  const player = new Player(report, (file) => urls.get(file) ?? "");
+  const player = new Player(report, (file) => urls.get(file) ?? "", open);
+  const browser = browserLine(report.browser ?? {});
+  if (browser) app.append(h("p", { class: "dim", "data-testid": "browser-line" }, browser));
   app.append(player.el);
   if (report.videoError) app.prepend(h("p", { class: "notice" }, `No video: ${report.videoError}`));
   else if (report.video && !urls.has(report.video.file)) app.prepend(h("p", { class: "notice", "data-testid": "video-missing" }, `Could not read ${report.video.file}.`));
